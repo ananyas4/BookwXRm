@@ -9,10 +9,12 @@ class ImageTracking {
     private var rootEntity = Entity()
 
     init() {
+        print("Init Image Tracking")
         setupImageTracking()
     }
 
     func setupImageTracking() {
+        print("Setup Image Tracking")
         session = ARKitSession()
         imageInfo = ImageTrackingProvider(
             referenceImages: ReferenceImage.loadReferenceImages(inGroupNamed: "AR Resources")
@@ -21,6 +23,7 @@ class ImageTracking {
         if ImageTrackingProvider.isSupported {
             Task {
                 do {
+                    print("ImageTrackingProvider Task Loop")
                     try await session?.run([imageInfo!])
                     for await update in imageInfo!.anchorUpdates {
                         updateImage(update.anchor)
@@ -33,6 +36,7 @@ class ImageTracking {
     }
 
     func updateImage(_ anchor: ImageAnchor) {
+        print("Update Image")
         if entityMap[anchor.id] == nil {
             let entity = ModelEntity(mesh: .generateSphere(radius: 0.05))
             entityMap[anchor.id] = entity

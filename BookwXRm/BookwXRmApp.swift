@@ -17,11 +17,14 @@ struct BookwXRmApp: App {
             ContentView()
                 .environment(appModel)
         }
+        
 
         ImmersiveSpace(id: appModel.immersiveSpaceID) {
             ImmersiveView()
                 .environment(appModel)
                 .onAppear {
+                    print("Immersive view appeared")
+                    var imageTracking: ImageTracking = ImageTracking()
                     appModel.immersiveSpaceState = .open
                 }
                 .onDisappear {
