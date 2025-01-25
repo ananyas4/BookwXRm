@@ -38,7 +38,18 @@ class ImageTracking {
     func updateImage(_ anchor: ImageAnchor) {
         print("Update Image")
         if entityMap[anchor.id] == nil {
-            let entity = ModelEntity(mesh: .generateSphere(radius: 0.05))
+            //let entity = ModelEntity(mesh: .generateSphere(radius: 0.05))
+            
+            // Create ModelEntity for spawned sphere
+            let entity = ModelEntity()
+            
+            // Define sphere radius, mesh, and material
+            let sphereRadius: Float = 0.05
+            let sphereMesh = MeshResource.generateSphere(radius: sphereRadius)
+            let sphereMaterial = SimpleMaterial(color: .white, isMetallic: false)
+            
+            // Update entity components
+            entity.components.set(ModelComponent(mesh: sphereMesh, materials: [sphereMaterial]))
             entityMap[anchor.id] = entity
             rootEntity.addChild(entity)
         }
