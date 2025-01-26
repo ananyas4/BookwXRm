@@ -1,14 +1,8 @@
-//
-//  ImmersiveView.swift
-//  BookwXRm
-//
-//  Created by Ananya on 1/24/25.
-//
-
 import SwiftUI
 import RealityKit
 import RealityKitContent
 import ARKit
+import AVFoundation
 
 struct ImmersiveView: View {
     
@@ -22,25 +16,20 @@ struct ImmersiveView: View {
     @State private var skyboxEntity = Entity()
     
     private let SPHERE_MESH: MeshResource = MeshResource.generateSphere(radius: 0.02)
-    
     private let SPHERE_MATERIAL: SimpleMaterial = SimpleMaterial(color: .red, isMetallic: false)
+    
+    @State private var audioPlayer: AVAudioPlayer?
+    @State private var currentAudioFile: String?
 
     var body: some View {
         RealityView { content in
-            // Add the initial RealityKit content
             if let immersiveContentEntity = try? await Entity(named: "Immersive", in: realityKitContentBundle) {
-
-                // Put skybox here.  See example in World project available at
-                // https://developer.apple.com/
+                // Add skybox content
             }
-            sphereEntity = ModelEntity(
-                mesh: SPHERE_MESH,
-                materials: [SPHERE_MATERIAL]
-            )
             
-            var skyboxEntity = createImmersivePicture(imageName : "skybox1.png")
+            sphereEntity = ModelEntity(mesh: SPHERE_MESH, materials: [SPHERE_MATERIAL])
+            skyboxEntity = createImmersivePicture(imageName: "skybox1.png")
             content.add(skyboxEntity)
-            
             content.add(sphereEntity)
             sphereEntity.isEnabled = false
         }.task {
@@ -49,15 +38,14 @@ struct ImmersiveView: View {
         }
     }
     
-    // https://www.createwithswift.com/creating-immersive-experience-360-degree-image-visionos/
-    func createImmersivePicture(imageName : String) -> Entity {
+    func createImmersivePicture(imageName: String) -> Entity {
         let modelEntity = Entity()
         let texture = try? TextureResource.load(named: imageName)
         var material = UnlitMaterial()
-        material.color = .init(tint: .init( red: 1.0, green: 1.0, blue: 1.0, alpha: 0.6), texture: .init(texture!))
+        material.color = .init(texture: .init(texture!))
         modelEntity.components.set(ModelComponent(mesh: .generateSphere(radius: 1000), materials: [material]))
         modelEntity.scale = .init(x: -1, y: 1, z: 1)
-        modelEntity.transform.translation += SIMD3<Float>(0.0, 1.0, 0.0)
+        modelEntity.transform.translation += SIMD3<Float>(0, -0.3, -0.15)
         return modelEntity
     }
     
@@ -69,7 +57,7 @@ struct ImmersiveView: View {
                 print("Image Tracking Provider is NOT Supported.")
             }
         } catch {
-            print("Image Tracking Exception: [(type(of: self))] [(#function)] (error)")
+            print("Image Tracking Exception: \(error)")
         }
     }
     
@@ -80,76 +68,86 @@ struct ImmersiveView: View {
     }
     
     private func updateImage(_ anchor: ImageAnchor) {
+        print("updateImage called for image:", anchor.referenceImage.name ?? "Unknown")
 
-        print("updateImage called")
+        let anchorTransform = Transform(matrix: anchor.originFromAnchorTransform)
+        let bookPosition = anchorTransform.translation
+
+        // Check if occlusion box already exists
         if entityMap[anchor.id] == nil {
-            print("inside first if")
-            entityMap[anchor.id] = sphereEntity
-        }
-    
-        if anchor.isTracked {
-            print("inside second if")
-            //sphereEntity.isEnabled = true
+            print(" creating occlusion box at detected position \(anchor) " )
             
-            let imageName = anchor.referenceImage.name!
-            print("anchor image name: " + imageName)
-            
-            if imageName.contains("page12") {
-                print("page 1 or 2 detected")
-                
-                let texture = try? TextureResource.load(named: "skybox1.png")
-                var material = UnlitMaterial()
-                material.color = .init(texture: .init(texture!))
-                skyboxEntity.components.set(ModelComponent(mesh: .generateSphere(radius: 1000), materials: [OcclusionMaterial()]))
-                
-            } else if imageName.contains("page34") {
-                
-                let texture = try? TextureResource.load(named: "skybox2.png")
-                var material = UnlitMaterial()
-                material.color = .init(texture: .init(texture!))
-                skyboxEntity.components.set(ModelComponent(mesh: .generateSphere(radius: 1000), materials: [material]))
-                
-                print("page 3 or 4 detected")
-            } else if imageName.contains("page56") {
-                print("page 5 or 6 detected")
-            }
-//
-//                let imageName = anchor.referenceImage.name!
-            // print("anchor image name: " + imageName)
 
-//                if imageName == "They_Live_HERO" {
-//                    entityMap[anchor.id]?.model?.mesh = MESH_OBEY
-//                    entityMap[anchor.id]?.model?.materials = [MATERIALS_OBEY]
-//                } else {
-//                    entityMap[anchor.id]?.model?.mesh = MESH_AI
-//                    entityMap[anchor.id]?.model?.materials = [MATERIALS_AI]
-//                }
+            let bookSize = SIMD3<Float>(
+                0.55,  // Convert CGFloat → Float
+                0.35,  // Approximate depth
+                0.25 // Convert CGFloat → Float
+            )
 
-            // 1. Get the anchor's transform
-            let anchorTransform = Transform(matrix: anchor.originFromAnchorTransform)
-
-            // 2. Define the local offset you’d like in the anchor’s space
-            let localOffset = SIMD3<Float>(0.3, 0.0, 0.05)
-
-            // 3. Rotate this offset by the anchor's rotation (quaternion)
-            let rotatedOffset = simd_act(anchorTransform.rotation, localOffset)
-
-            // 4. Apply the rotated offset to the anchor's translation
-            entityMap[anchor.id]?.transform.translation = anchorTransform.translation + rotatedOffset
-//
-//            let rotation = simd_quatf(angle: -(.pi / 2), axis: [1, 0, 0])
-//            entityMap[anchor.id]?.transform.rotation = transform.rotation * rotation
+            let occlusionBox = createOcclusionBox(size: bookSize, position: bookPosition)
+            entityMap[anchor.id] = occlusionBox
+            skyboxEntity.addChild(occlusionBox)
         } else {
-            print("inside else")
-            sphereEntity.isEnabled = false
+            entityMap[anchor.id]!.transform.translation = anchorTransform.translation
+        }
+
+        // **🔹 Page Detection Logic (Re-Added)**
+        if anchor.isTracked {
+            let imageName = anchor.referenceImage.name ?? "Unknown"
+            print("Detected Image Name: \(imageName)")
+
+            if imageName.contains("page12") {
+                print("✅ Page 12 detected!")
+                updateSkybox(imageName: "skybox1.png")
+                playAudio(filename: "realityhack.mp3")  // Play audio when page 12 is detected
+            }
+            else if imageName.contains("page34") {
+                print("✅ Page 34 detected!")
+                updateSkybox(imageName: "skybox2.png")
+                // No new audio → keeps playing "realityhack.mp3" if no new audio is specified
+            }
+        } else {
+            print("⏳ Anchor lost tracking, keeping occlusion box for a few seconds.")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                
+            }
         }
     }
-    
-}
 
-/*
-#Preview(immersionStyle: .mixed) {
-    ImmersiveView()
-        .environment(AppModel())
+    func createOcclusionBox(size: SIMD3<Float>, position: SIMD3<Float>) -> ModelEntity {
+        let boxMesh = MeshResource.generateBox(size: size)
+        let occlusionMaterial = OcclusionMaterial()
+        let occlusionEntity = ModelEntity(mesh: boxMesh, materials: [occlusionMaterial])
+
+        occlusionEntity.transform.translation = position
+        return occlusionEntity
+    }
+
+    private func updateSkybox(imageName: String) {
+        let texture = try? TextureResource.load(named: imageName)
+        var material = UnlitMaterial()
+        material.color = .init(texture: .init(texture!))
+        skyboxEntity.components.set(ModelComponent(mesh: .generateSphere(radius: 1000), materials: [material]))
+    }
+    
+    private func playAudio(filename: String) {
+        // Prevent reloading if the same audio is already playing
+        if currentAudioFile == filename {
+            return
+        }
+
+        guard let url = Bundle.main.url(forResource: filename, withExtension: nil) else {
+            print("❌ Audio file not found: \(filename)")
+            return
+        }
+
+        do {
+            audioPlayer = try AVAudioPlayer(contentsOf: url)
+            audioPlayer?.numberOfLoops = -1  // Loop indefinitely
+            audioPlayer?.play()
+            currentAudioFile = filename
+        } catch {
+            print("❌ Error playing audio: \(error)")
+        }
+    }
 }
-*/
