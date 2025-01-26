@@ -14,11 +14,12 @@ struct ImmersiveView: View {
     
     private let session = ARKitSession()
     private let imageTrackingProvider = ImageTrackingProvider(
-        referenceImages: ReferenceImage.loadReferenceImages(inGroupNamed: "AR Resources")
+        referenceImages: ReferenceImage.loadReferenceImages(inGroupNamed: "PageImages")
     )
     
     @State private var entityMap: [UUID: ModelEntity] = [:]
     @State private var sphereEntity = ModelEntity()
+    @State private var skyboxEntity = Entity()
     
     private let SPHERE_MESH: MeshResource = MeshResource.generateSphere(radius: 0.02)
     
@@ -36,12 +37,28 @@ struct ImmersiveView: View {
                 mesh: SPHERE_MESH,
                 materials: [SPHERE_MATERIAL]
             )
+            
+            var skyboxEntity = createImmersivePicture(imageName : "skybox1.png")
+            content.add(skyboxEntity)
+            
             content.add(sphereEntity)
             sphereEntity.isEnabled = false
         }.task {
             await runSession()
             await processImageTrackingUpdates()
         }
+    }
+    
+    // https://www.createwithswift.com/creating-immersive-experience-360-degree-image-visionos/
+    func createImmersivePicture(imageName : String) -> Entity {
+        let modelEntity = Entity()
+        let texture = try? TextureResource.load(named: imageName)
+        var material = UnlitMaterial()
+        material.color = .init(tint: .init( red: 1.0, green: 1.0, blue: 1.0, alpha: 0.6), texture: .init(texture!))
+        modelEntity.components.set(ModelComponent(mesh: .generateSphere(radius: 1000), materials: [material]))
+        modelEntity.scale = .init(x: -1, y: 1, z: 1)
+        modelEntity.transform.translation += SIMD3<Float>(0.0, 1.0, 0.0)
+        return modelEntity
     }
     
     func runSession() async {
@@ -72,7 +89,30 @@ struct ImmersiveView: View {
     
         if anchor.isTracked {
             print("inside second if")
-            sphereEntity.isEnabled = true
+            //sphereEntity.isEnabled = true
+            
+            let imageName = anchor.referenceImage.name!
+            print("anchor image name: " + imageName)
+            
+            if imageName.contains("page12") {
+                print("page 1 or 2 detected")
+                
+                let texture = try? TextureResource.load(named: "skybox1.png")
+                var material = UnlitMaterial()
+                material.color = .init(texture: .init(texture!))
+                skyboxEntity.components.set(ModelComponent(mesh: .generateSphere(radius: 1000), materials: [OcclusionMaterial()]))
+                
+            } else if imageName.contains("page34") {
+                
+                let texture = try? TextureResource.load(named: "skybox2.png")
+                var material = UnlitMaterial()
+                material.color = .init(texture: .init(texture!))
+                skyboxEntity.components.set(ModelComponent(mesh: .generateSphere(radius: 1000), materials: [material]))
+                
+                print("page 3 or 4 detected")
+            } else if imageName.contains("page56") {
+                print("page 5 or 6 detected")
+            }
 //
 //                let imageName = anchor.referenceImage.name!
             // print("anchor image name: " + imageName)

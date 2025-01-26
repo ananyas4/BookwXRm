@@ -4,6 +4,35 @@
     "version" : 1
   },
   "resources" : [
-
+    {
+      "filename" : "page12_1.arreferenceimage"
+    },
+    {
+      "filename" : "page12_2.arreferenceimage"
+    },
+    {
+      "filename" : "page12_3.arreferenceimage"
+    },
+    {
+      "filename" : "page12_4.arreferenceimage"
+    },
+    {
+      "filename" : "page12_5.arreferenceimage"
+    },
+    {
+      "filename" : "page12_6.arreferenceimage"
+    },
+    {
+      "filename" : "page34_1.arreferenceimage"
+    },
+    {
+      "filename" : "page34_2.arreferenceimage"
+    },
+    {
+      "filename" : "page34_3.arreferenceimage"
+    },
+    {
+      "filename" : "page34_4.arreferenceimage"
+    }
   ]
 }
