@@ -1,6 +1,7 @@
 {
   "images" : [
     {
+      "filename" : "grdnt_bkg.png",
       "idiom" : "vision",
       "scale" : "2x"
     }

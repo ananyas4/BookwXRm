@@ -3,8 +3,10 @@ import RealityKit
 import RealityKitContent
 import ARKit
 import AVFoundation
+import WebKit
 
 struct ImmersiveView: View {
+    
     
     private let session = ARKitSession()
     private let imageTrackingProvider = ImageTrackingProvider(
@@ -14,6 +16,10 @@ struct ImmersiveView: View {
     @State private var entityMap: [UUID: ModelEntity] = [:]
     @State private var sphereEntity = ModelEntity()
     @State private var skyboxEntity = Entity()
+    @State private var youtubeEntity = Entity()
+
+    
+    @State private var showYouTubeVideo = false // 🔹 State to show/hide YouTube video
     
     private let SPHERE_MESH: MeshResource = MeshResource.generateSphere(radius: 0.02)
     private let SPHERE_MATERIAL: SimpleMaterial = SimpleMaterial(color: .red, isMetallic: false)
@@ -22,20 +28,82 @@ struct ImmersiveView: View {
     @State private var currentAudioFile: String?
 
     var body: some View {
-        RealityView { content in
-            if let immersiveContentEntity = try? await Entity(named: "Immersive", in: realityKitContentBundle) {
-                // Add skybox content
+    
+        ZStack {
+            
+            RealityView { content, attachments in
+                if let immersiveContentEntity = try? await Entity(named: "Immersive", in: realityKitContentBundle) {
+                    // Add skybox content
+                }
+                
+                sphereEntity = ModelEntity(mesh: SPHERE_MESH, materials: [SPHERE_MATERIAL])
+                skyboxEntity = createImmersivePicture(imageName: "skybox1.png")
+                content.add(skyboxEntity)
+                content.add(sphereEntity)
+                sphereEntity.isEnabled = false
+                
+                let bookSize = SIMD3<Float>(
+                    0.55,
+                    0.35,
+                    0.25
+                )
+                
+                let bookPosition = SIMD3<Float>(0, 1.4, -0.2)
+                
+                let occlusionBox = createOcclusionBox(size: bookSize, position: bookPosition)
+                skyboxEntity.addChild(occlusionBox)
+                
+                if let youtubePanel = attachments.entity(for: "Youtube" ){
+                    
+                    youtubePanel.position = [0, 1.7, -1]
+                    content.add(youtubePanel)
+                    youtubeEntity = youtubePanel
+                    youtubeEntity.isEnabled = showYouTubeVideo
+                    
+                }
+            } attachments: {
+                Attachment(id: "Youtube" ) {
+                    youtubePanel()
+                }
+            }.task {
+                await runSession()
+                await processImageTrackingUpdates()
+            }.onChange(of: showYouTubeVideo){
+                
+                    youtubeEntity.isEnabled = $1
+                
             }
             
-            sphereEntity = ModelEntity(mesh: SPHERE_MESH, materials: [SPHERE_MATERIAL])
-            skyboxEntity = createImmersivePicture(imageName: "skybox1.png")
-            content.add(skyboxEntity)
-            content.add(sphereEntity)
-            sphereEntity.isEnabled = false
-        }.task {
-            await runSession()
-            await processImageTrackingUpdates()
+            // 🔹 Show YouTube video when page 23 is detected
+            
         }
+    }
+    
+    func youtubePanel() -> some View {
+        
+        VStack {
+            Text("Watch this Video!")
+                .font(.title)
+                .foregroundColor(.white)
+            
+            YouTubeWebView(videoID: "R2lP146KA5A") // Replace with the correct video ID
+                .frame(width: 600, height: 400)
+                .cornerRadius(12)
+                .shadow(radius: 10)
+                
+            Button("Close Video") {
+                showYouTubeVideo = false // Hide when user clicks
+            }
+            .padding()
+            .background(Color.white)
+            .foregroundColor(.black)
+            .cornerRadius(10)
+        }
+        .background(Color.black.opacity(0.8))
+        .cornerRadius(12)
+        .padding()
+        
+
     }
     
     func createImmersivePicture(imageName: String) -> Entity {
@@ -68,6 +136,9 @@ struct ImmersiveView: View {
     }
     
     private func updateImage(_ anchor: ImageAnchor) {
+        if showYouTubeVideo {
+            print("showYoutubeVideo triggered")
+        }
         print("updateImage called for image:", anchor.referenceImage.name ?? "Unknown")
 
         let anchorTransform = Transform(matrix: anchor.originFromAnchorTransform)
@@ -75,13 +146,12 @@ struct ImmersiveView: View {
 
         // Check if occlusion box already exists
         if entityMap[anchor.id] == nil {
-            print(" creating occlusion box at detected position \(anchor) " )
-            
+            print("Creating occlusion box at detected position \(anchor)")
 
             let bookSize = SIMD3<Float>(
-                0.55,  // Convert CGFloat → Float
-                0.35,  // Approximate depth
-                0.25 // Convert CGFloat → Float
+                0.55,
+                0.35,
+                0.25
             )
 
             let occlusionBox = createOcclusionBox(size: bookSize, position: bookPosition)
@@ -91,7 +161,7 @@ struct ImmersiveView: View {
             entityMap[anchor.id]!.transform.translation = anchorTransform.translation
         }
 
-        // **🔹 Page Detection Logic (Re-Added)**
+        // **🔹 Page Detection Logic**
         if anchor.isTracked {
             let imageName = anchor.referenceImage.name ?? "Unknown"
             print("Detected Image Name: \(imageName)")
@@ -99,18 +169,20 @@ struct ImmersiveView: View {
             if imageName.contains("page12") {
                 print("✅ Page 12 detected!")
                 updateSkybox(imageName: "skybox1.png")
-                playAudio(filename: "realityhack.mp3")  // Play audio when page 12 is detected
+                playAudio(filename: "realityhack.mp3")
             }
             else if imageName.contains("page34") {
                 print("✅ Page 34 detected!")
                 updateSkybox(imageName: "skybox2.png")
-                // No new audio → keeps playing "realityhack.mp3" if no new audio is specified
+                
+                playAudio(filename: "realityhack_secondtrack.mp3")
+                showYouTubeVideo = true // Show the video overlay
+
             }
+          
         } else {
             print("⏳ Anchor lost tracking, keeping occlusion box for a few seconds.")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                
-            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { }
         }
     }
 
@@ -131,7 +203,6 @@ struct ImmersiveView: View {
     }
     
     private func playAudio(filename: String) {
-        // Prevent reloading if the same audio is already playing
         if currentAudioFile == filename {
             return
         }
@@ -143,11 +214,31 @@ struct ImmersiveView: View {
 
         do {
             audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.numberOfLoops = -1  // Loop indefinitely
+            audioPlayer?.numberOfLoops = -1
             audioPlayer?.play()
             currentAudioFile = filename
         } catch {
             print("❌ Error playing audio: \(error)")
         }
     }
+}
+
+// 🔹 YouTube Video WebView using WKWebView
+struct YouTubeWebView: UIViewRepresentable {
+    let videoID: String
+
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = WKWebView()
+        webView.configuration.allowsInlineMediaPlayback = true
+        webView.scrollView.isScrollEnabled = false
+
+        let embedURL = "https://www.youtube.com/embed/\(videoID)?playsinline=1&autoplay=1"
+        if let url = URL(string: embedURL) {
+            webView.load(URLRequest(url: url))
+        }
+
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
